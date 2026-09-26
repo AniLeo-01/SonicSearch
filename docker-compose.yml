@@ -1,0 +1,40 @@
+# SonicSearch: the API and PostgreSQL with pgvector.
+#   docker compose up --build            -> http://localhost:8000 (the first start downloads the models and indexes data/)
+#   docker compose run --rm app python -m app.ingest     (transcribe new recordings; needs GROQ_API_KEY in .env)
+#   docker compose exec app python -m app.index          (after editing transcripts on the host)
+services:
+  db:
+    image: pgvector/pgvector:pg17  # the official postgres image + pgvector; pg_trgm and fuzzystrmatch ship with it
+    environment:
+      POSTGRES_USER: sonicsearch
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sonicsearch}
+      POSTGRES_DB: sonicsearch
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sonicsearch -d sonicsearch"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # no published port: only the app reaches the database
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - path: .env  # GROQ_API_KEY and tuning; the values under `environment` win
+        required: false
+    environment:
+      DB_URL: postgresql://sonicsearch:${POSTGRES_PASSWORD:-sonicsearch}@db:5432/sonicsearch
+      DATA_DIR: /app/data
+    ports:
+      - "127.0.0.1:${PORT:-8000}:8000"  # no authentication: reachable from this machine only
+    volumes:
+      - ./data:/app/data  # recordings, transcripts and uploads stay on the host
+      - model-cache:/home/app/.cache  # ~1.7 GB of models, downloaded once
+
+volumes:
+  pgdata:
+  model-cache:
