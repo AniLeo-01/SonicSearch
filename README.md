@@ -26,7 +26,7 @@ Open <http://localhost:8000>.
 The app is only reachable from this machine: there's no login, so don't expose it publicly as is.
 
 **CI/CD** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)):
-- **Every pull request and push:** runs the tests, then builds the image and smoke-tests it (CPU-only torch, `torchaudio` loads, the app imports).
+- **Every pull request and push:** runs the tests (including the database tests, against a pgvector service container), then builds the image and smoke-tests it (CPU-only torch, `torchaudio` loads, the app imports).
 - **Pushes to `main`:** also publish the image to `ghcr.io/anileo-01/sonicsearch`, tagged `latest` and with the commit SHA.
 
 ## Run locally
@@ -71,7 +71,7 @@ Transcripts for the six dataset recordings are in `data/transcripts/`. If they'r
 | `uv run python -m app.evaluate [--split dev\|test]` | Score search on the golden queries. |
 | `uv run --with beautifulsoup4 --with lxml python scripts/build_dataset.py` | Rebuild the dataset audio from NASA's public sources. |
 | `uv run python scripts/label_helper.py` | Turn `data/eval/queries.src.yaml` into `queries.yaml` (existing labels are kept). |
-| `uv run python -m pytest` | Tests. |
+| `uv run python -m pytest` | Tests. Set `TEST_DB_URL` to a throwaway PostgreSQL with pgvector to include the database tests, which rebuild its tables. |
 
 ## How it works
 

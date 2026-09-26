@@ -443,7 +443,7 @@ flowchart LR
 | `docker-compose.yml` | `db` (health-checked with `pg_isready`) and `app` (starts once `db` is healthy). `.env` is passed in if present; `DB_URL` and `DATA_DIR` are always set by compose. |
 | `.dockerignore` | Keeps `.git`, `.venv`, `data/` and `.env` out of the build context, so no key or data is baked into the image. |
 | Volumes | `./data` (bind), `model-cache` (Hugging Face and speaker models), `pgdata` (the database). `docker compose down -v` deletes the last two. |
-| CI/CD (`.github/workflows/ci.yml`) | On every pull request and push: `uv sync --locked` and the tests, then an image build with a smoke test (`torch` has no CUDA, `torchaudio` loads, `app.main` imports). On pushes to `main`, the same image is published to `ghcr.io/anileo-01/sonicsearch` as `latest` and `sha-<commit>`. |
+| CI/CD (`.github/workflows/ci.yml`) | On every pull request and push: `uv sync --locked` and the tests (unit tests, plus search against a pgvector service container), then an image build with a smoke test (`torch` has no CUDA, `torchaudio` loads, `app.main` imports). On pushes to `main`, the same image is published to `ghcr.io/anileo-01/sonicsearch` as `latest` and `sha-<commit>`. |
 
 ## Operations
 

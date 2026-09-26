@@ -16,16 +16,30 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:  # a throwaway database for tests/test_search_db.py, which rebuilds its tables
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      TEST_DB_URL: postgresql://postgres:test@localhost:5432/postgres
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0  # this action publishes no floating major tag
         with:
           version: "0.5.21"  # the uv that wrote uv.lock (also pinned in the Dockerfile)
           enable-cache: true
       - name: Install (from uv.lock; Linux gets CPU-only torch)
         run: uv sync --locked
-      - name: Tests
-        run: uv run python -m pytest -q
+      - name: Tests (unit + database; the HTML parsers are only for the dataset script's test)
+        run: uv run --with beautifulsoup4 --with lxml python -m pytest -q
 
   image:
     needs: test
