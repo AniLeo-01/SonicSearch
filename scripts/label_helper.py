@@ -1,0 +1,125 @@
+#!/usr/bin/env python
+"""Turn human-authored query labels into the frozen golden set (data/eval/queries.yaml).
+
+Annotators write ``data/eval/queries.src.yaml`` referencing moments by utterance ranges of the
+reference transcript set, e.g. ``runway:70-72`` (inclusive).  This script resolves each range to an
+audio-time interval (first utterance start -> last utterance end) and stores the spoken text as an
+auditable quote.  The emitted file contains only times + quotes, so the golden set stays valid even if
+the transcripts, segmentation or chunking change later (utterance ids are just an authoring aid).
+
+Labels already in the output are kept as they are: their utterance ranges refer to the transcripts they were
+written against, and re-transcribing renumbers utterances (this repo's transcripts put only about half of the
+original ranges on the labelled moment). Only queries new to the output are resolved; --force re-resolves all.
+
+Usage: uv run python scripts/label_helper.py [--transcripts DIR] [--src FILE] [--out FILE]   (defaults under DATA_DIR)
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+from pathlib import Path
+
+import yaml
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from app.config import settings  # noqa: E402
+from app.models import Transcript  # noqa: E402
+
+DATA = ROOT / settings.data_dir  # DATA_DIR may be relative (to the repo) or absolute
+REF_RE = re.compile(r"^(?P<file>[a-z0-9_]+):(?P<a>\d+)(?:-(?P<b>\d+))?(?:@(?P<grade>[12]))?$")
+
+
+def merge_close(rel: list[dict], gap: float) -> list[dict]:
+    """Merge same-file moments whose +/-tolerance windows overlap (gap < 2 x tolerance).
+
+    Two mentions a few seconds apart are one place in the audio for a listener; keeping them separate
+    would demand two near-identical results.  Applied uniformly to every query.
+    """
+    out: list[dict] = []
+    for r in sorted(rel, key=lambda x: (x["file"], x["start"])):
+        prev = out[-1] if out else None
+        if prev and prev["file"] == r["file"] and r["start"] - prev["end"] < gap:
+            prev["end"] = max(prev["end"], r["end"])
+            prev["grade"] = max(prev["grade"], r["grade"])
+            prev["quote"] = (prev["quote"] + " [...] " + r["quote"])[:240]
+        else:
+            out.append(dict(r))
+    return out
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--transcripts", default=str(DATA / "transcripts"), help="the transcripts the labels were written against")
+    ap.add_argument("--src", default=str(DATA / "eval/queries.src.yaml"))
+    ap.add_argument("--out", default=str(DATA / "eval/queries.yaml"))
+    ap.add_argument("--force", action="store_true", help="re-resolve queries already in --out too (only valid against the transcripts they were written for)")
+    args = ap.parse_args()
+
+    src = yaml.safe_load(Path(args.src).read_text())
+    out = Path(args.out)
+    frozen = {} if args.force or not out.exists() else {q["id"]: q["relevant"] for q in yaml.safe_load(out.read_text())["queries"]}
+    cache: dict[str, Transcript] = {}
+    out_queries = []
+    for q in src["queries"]:
+        if q["id"] in frozen:  # labels stay; text, category, split and notes still come from the source
+            item = {k: q[k] for k in ("id", "query", "category", "split") if k in q}
+            item.update({k: q[k] for k in ("role", "notes") if q.get(k)})
+            item["relevant"] = frozen[q["id"]]
+            out_queries.append(item)
+            continue
+        rel = []
+        for ref in q["relevant"]:
+            m = REF_RE.match(ref.strip())
+            if not m:
+                raise SystemExit(f"{q['id']}: bad reference {ref!r} (expected file:start-end[@grade])")
+            fid = m["file"]
+            if fid not in cache:
+                cache[fid] = Transcript.load(Path(args.transcripts) / f"{fid}.json")
+            t = cache[fid]
+            a, b = int(m["a"]), int(m["b"] or m["a"])
+            if not (0 <= a <= b < len(t.utterances)):
+                raise SystemExit(f"{q['id']}: utterance range {a}-{b} out of bounds for {fid}")
+            us = t.utterances[a : b + 1]
+            quote = " ".join(u.text for u in us)
+            rel.append(
+                {
+                    "file": fid,
+                    "start": round(us[0].start, 2),
+                    "end": round(us[-1].end, 2),
+                    "grade": int(m["grade"] or 2),
+                    "quote": quote if len(quote) <= 240 else quote[:237] + "...",
+                }
+            )
+        rel = merge_close(rel, 2 * float(src.get("tolerance_sec", 5.0)))
+        item = {k: q[k] for k in ("id", "query", "category", "split") if k in q}
+        if q.get("role"):
+            item["role"] = q["role"]
+        if q.get("notes"):
+            item["notes"] = q["notes"]
+        item["relevant"] = rel
+        out_queries.append(item)
+    header = (
+        "# GENERATED by scripts/label_helper.py from data/eval/queries.src.yaml - edit the source, not this file.\n"
+        "# Relevance is expressed as audio-time intervals (seconds) so labels do not depend on chunking.\n"
+    )
+    body = {
+        "version": src.get("version", 1),
+        "tolerance_sec": src.get("tolerance_sec", 5.0),
+        "description": src.get("description", ""),
+        "queries": out_queries,
+    }
+    Path(args.out).write_text(header + yaml.safe_dump(body, sort_keys=False, allow_unicode=True, width=110))
+    cats: dict[str, int] = {}
+    for q in out_queries:
+        cats[q["category"]] = cats.get(q["category"], 0) + 1
+    new = sum(q["id"] not in frozen for q in out_queries)
+    print(f"wrote {args.out}: {len(out_queries)} queries {cats}; {len(out_queries) - new} labels kept, {new} resolved from {args.transcripts}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
