@@ -1,0 +1,69 @@
+# Golden audio dataset manifest.
+#
+# Six ~9.3-minute excerpts of NASA "Houston We Have a Podcast" (HWHAP) interviews.
+# Selection rules (see docs/DATASET.md for the rationale):
+#   * exactly two speakers in the excerpt (host + guest), verified against NASA's human transcript
+#   * no speaker appears in more than one file (6 distinct hosts, 6 distinct guests)
+#   * 6 distinct topics, with deliberate cross-file "confusers" (e.g. brain navigation vs clock navigation)
+#   * excerpt starts at the first conversational turn after the intro music, ends on a sentence boundary
+#
+# License: NASA audio and transcripts are US Government works and generally not subject to copyright
+# in the United States (https://www.nasa.gov/nasa-brand-center/images-and-media/). Use does not imply
+# NASA endorsement. Offsets below let `scripts/build_dataset.py` rebuild every file from the source.
+dataset: nasa-hwhap-two-speaker-v1
+source_feed: https://www.nasa.gov/feeds/podcasts/houston-we-have-a-podcast
+files:
+  - file_id: ai_at_nasa
+    title: "AI at NASA"
+    episode: 424
+    published: 2026-05-29
+    page_url: https://www.nasa.gov/podcasts/nasa-podcasts/ai-at-nasa/
+    source_audio_url: https://traffic.megaphone.fm/NATIONALAERONAUTICSANDSPACEADMINISTRATION8144252345.mp3
+    excerpt: {start: 107.78, end: 670.18}
+    speakers: {host: "Nilufar Ramji", guest: "Kevin Murphy"}
+    topic: "Artificial intelligence, machine learning and data science at NASA"
+  - file_id: stem_cells
+    title: "ISS Results: Stem Cells in Space"
+    episode: 432
+    published: 2026-08-07
+    page_url: https://www.nasa.gov/podcasts/houston-we-have-a-podcast/iss-results-stem-cells-in-space/
+    source_audio_url: https://traffic.megaphone.fm/NATIONALAERONAUTICSANDSPACEADMINISTRATION1953821370.mp3
+    excerpt: {start: 142.88, end: 707.16}
+    speakers: {host: "Gary Jordan", guest: "Abba Zubair"}
+    topic: "Stem cell research on the space station and regenerative medicine"
+  - file_id: wayfinding
+    title: "ISS Results: Wayfinding"
+    episode: 427
+    published: 2026-06-26
+    page_url: https://www.nasa.gov/podcasts/houston-we-have-a-podcast/iss-results-wayfinding/
+    source_audio_url: https://traffic.megaphone.fm/NATIONALAERONAUTICSANDSPACEADMINISTRATION8038421748.mp3
+    excerpt: {start: 115.18, end: 668.90}
+    speakers: {host: "Leah Cheshier", guest: "Giuseppe Iaria"}
+    topic: "Neuroscience of spatial orientation and cognitive maps in astronauts"
+  - file_id: telling_time
+    title: "Telling Time on Other Worlds"
+    episode: 419
+    published: 2026-04-24
+    page_url: https://www.nasa.gov/podcasts/houston-we-have-a-podcast/telling-time-on-other-worlds/
+    source_audio_url: https://traffic.megaphone.fm/NATIONALAERONAUTICSANDSPACEADMINISTRATION9666433108.mp3
+    excerpt: {start: 87.76, end: 649.06}
+    speakers: {host: "Dane Turner", guest: "Kevin Coggins"}
+    topic: "Precision timekeeping, clocks and navigation on the Moon and Mars"
+  - file_id: runway
+    title: "Runway to the Stars"
+    episode: 389
+    published: 2025-06-13
+    page_url: https://www.nasa.gov/podcasts/houston-we-have-a-podcast/runway-to-the-stars/
+    source_audio_url: https://traffic.megaphone.fm/NATIONALAERONAUTICSANDSPACEADMINISTRATION3421220605.mp3
+    excerpt: {start: 76.72, end: 635.34}
+    speakers: {host: "Courtney Beasley", guest: "David Johnson"}
+    topic: "Aviation history of Ellington Field and NASA aircraft operations for astronaut training"
+  - file_id: artemis_launch
+    title: "Artemis II: Launch"
+    episode: 401
+    published: 2025-09-12
+    page_url: https://www.nasa.gov/podcasts/houston-we-have-a-podcast/artemis-ii-launch/
+    source_audio_url: https://traffic.megaphone.fm/NATIONALAERONAUTICSANDSPACEADMINISTRATION8426457439.mp3
+    excerpt: {start: 96.00, end: 655.76}
+    speakers: {host: "Joseph Zakrzewski", guest: "Charlie Blackwell-Thompson"}
+    topic: "Career path of the Artemis launch director and launch operations"

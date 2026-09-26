@@ -1,0 +1,93 @@
+name: CI/CD
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:  # a throwaway database for tests/test_search_db.py, which rebuilds its tables
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      TEST_DB_URL: postgresql://postgres:test@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0  # this action publishes no floating major tag
+        with:
+          version: "0.5.21"  # the uv that wrote uv.lock (also pinned in the Dockerfile)
+          enable-cache: true
+      - name: Install (from uv.lock; Linux gets CPU-only torch)
+        run: uv sync --locked
+      - name: Tests (unit + database; the HTML parsers are only for the dataset script's test)
+        run: uv run --with beautifulsoup4 --with lxml python -m pytest -q
+
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write  # only used on pushes to main
+    env:
+      PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: sonicsearch:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test (CPU-only torch, torchaudio loads, the app imports)
+        run: |
+          docker run --rm -v "$PWD/data:/app/data:ro" sonicsearch:ci python -c "
+          import torch, torchaudio, app.main
+          assert not torch.backends.cuda.is_built(), 'the image has a CUDA build of torch'
+          print('torch', torch.__version__, '| torchaudio', torchaudio.__version__)"
+      - name: Log in to GHCR
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image tags
+        id: meta
+        if: env.PUBLISH == 'true'
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}  # lowercased by the action
+          tags: |
+            type=raw,value=latest
+            type=sha
+      - name: Publish (the layers are already built and cached)
+        if: env.PUBLISH == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha

@@ -1,0 +1,176 @@
+# Golden query set - SOURCE (human-authored).  Run `uv run python scripts/label_helper.py` to regenerate
+# data/eval/queries.yaml, which stores audio-time intervals + verbatim quotes (what the evaluator uses).
+#
+# Authoring protocol (see docs/EVALUATION.md):
+#   * queries were written by reading the transcripts BEFORE any retrieval tuning, then frozen;
+#   * relevance is exhaustive per query: every moment in the corpus that answers the query is listed;
+#   * references are utterance ranges "file:first-last" (inclusive); "@1" marks partial relevance
+#     (default grade 2 = directly relevant);
+#   * speaker-scoped queries are labelled with the TRUE speaker (from NASA's human transcript), even
+#     where our diarization is wrong - so diarization errors show up as retrieval misses, honestly;
+#   * split: every third query of each category is "dev" (tuning allowed), the rest are "test".
+version: 1
+tolerance_sec: 5.0
+description: >-
+  81 queries over 6 two-speaker NASA interviews (56 min). Categories probe exact terms, quoted phrases,
+  paraphrases, natural-language questions, multi-file topics, misspelled or ASR-mangled terms, and
+  role-scoped (host/guest) search.
+queries:
+  # ---------------------------------------------------------------- keyword: rare terms said verbatim
+  - {id: k01, query: "cesium", category: keyword, split: dev, relevant: ["telling_time:81-85"]}
+  - {id: k02, query: "pulsars", category: keyword, split: test, relevant: ["telling_time:66-70"]}
+  - {id: k03, query: "leap seconds", category: keyword, split: test, relevant: ["telling_time:71-73"]}
+  - {id: k04, query: "Deep Space Network", category: keyword, split: dev, relevant: ["telling_time:20"]}
+  - {id: k05, query: "Europa Clipper", category: keyword, split: test, relevant: ["telling_time:19"]}
+  - {id: k06, query: "Marine Corps", category: keyword, split: test, relevant: ["telling_time:9"]}
+  - {id: k07, query: "Challenger accident", category: keyword, split: dev, relevant: ["artemis_launch:55"]}
+  - {id: k08, query: "Hubble Space Telescope", category: keyword, split: test, relevant: ["artemis_launch:99"]}
+  - {id: k09, query: "Montreal Neurological Institute", category: keyword, split: test, relevant: ["wayfinding:19"]}
+  - {id: k10, query: "burn scars", category: keyword, split: dev, relevant: ["ai_at_nasa:38-39"]}
+  - {id: k11, query: "transformer architecture", category: keyword, split: test,
+     relevant: ["ai_at_nasa:20", "ai_at_nasa:37"]}
+  - {id: k12, query: "leukemia", category: keyword, split: test, relevant: ["stem_cells:87-89"]}
+  - {id: k13, query: "green card", category: keyword, split: dev, relevant: ["stem_cells:37-38"]}
+  - {id: k14, query: "Mercury 7 astronauts", category: keyword, split: test, relevant: ["runway:74"]}
+  - {id: k15, query: "WB-57", category: keyword, split: test,
+     relevant: ["runway:28", "runway:42", "runway:75", "runway:85", "runway:94-95"]}
+  - {id: k16, query: "El Paso", category: keyword, split: dev, relevant: ["runway:78", "runway:80-81", "runway:87"]}
+  - {id: k17, query: "neglect syndrome", category: keyword, split: test, relevant: ["wayfinding:34-36"]}
+  - {id: k18, query: "Nigeria", category: keyword, split: test,
+     relevant: ["stem_cells:13-15", "stem_cells:19", "stem_cells:22"]}
+
+  # ---------------------------------------------------------------- phrase: quoted exact phrases
+  - {id: p01, query: '"firing room one"', category: phrase, split: dev,
+     relevant: ["artemis_launch:54", "artemis_launch:65-66", "artemis_launch:73"]}
+  - {id: p02, query: '"space GPS"', category: phrase, split: test, relevant: ["telling_time:24-27"]}
+  - {id: p03, query: '"atomic clocks"', category: phrase, split: test,
+     relevant: ["telling_time:43", "telling_time:56"]}
+  - {id: p04, query: '"large language models"', category: phrase, split: dev,
+     relevant: ["ai_at_nasa:17", "ai_at_nasa:20", "ai_at_nasa:37"]}
+  - {id: p05, query: '"return to flight"', category: phrase, split: test,
+     relevant: ["artemis_launch:55", "artemis_launch:74", "artemis_launch:83"]}
+  - {id: p06, query: '"spatial orientation"', category: phrase, split: test,
+     relevant: ["wayfinding:47", "wayfinding:51-52", "wayfinding:67", "wayfinding:69"]}
+  - {id: p07, query: "\"pilot's license\"", category: phrase, split: dev, relevant: ["runway:101-105"]}
+  - {id: p08, query: '"blood cancer"', category: phrase, split: test, relevant: ["stem_cells:52"]}
+  - {id: p09, query: '"cognitive map"', category: phrase, split: test, relevant: ["wayfinding:59-60"]}
+  - {id: p10, query: '"deep learning"', category: phrase, split: dev,
+     relevant: ["ai_at_nasa:19", "ai_at_nasa:29", "ai_at_nasa:34-35", "ai_at_nasa:38", "ai_at_nasa:47"]}
+
+  # ---------------------------------------------------------------- paraphrase: meaning, not words
+  - {id: r01, query: "people who stop noticing one half of the world after a stroke", category: paraphrase,
+     split: dev, relevant: ["wayfinding:34-36"]}
+  - {id: r02, query: "people who get lost even in their own neighborhood", category: paraphrase, split: test,
+     relevant: ["wayfinding:55-56"]}
+  - {id: r03, query: "how our sense of balance feeds into knowing where we are", category: paraphrase,
+     split: test, relevant: ["wayfinding:61-64"]}
+  - {id: r04, query: "stricter review for high-stakes applications", category: paraphrase, split: dev,
+     relevant: ["ai_at_nasa:53-56"]}
+  - {id: r05, query: "a cross-government group that trades lessons learned", category: paraphrase,
+     split: test, relevant: ["ai_at_nasa:66-67"]}
+  - {id: r06, query: "systems that improve from experience rather than explicit programming",
+     category: paraphrase, split: test, relevant: ["ai_at_nasa:15-17"]}
+  - {id: r07, query: "his school counselor discouraged his dream of going to space", category: paraphrase,
+     split: dev, relevant: ["stem_cells:21-25"]}
+  - {id: r08, query: "using weightlessness to multiply cells", category: paraphrase, split: test,
+     relevant: ["stem_cells:56-58"]}
+  - {id: r09, query: "how funding limits make it hard to maintain old planes", category: paraphrase,
+     split: test, relevant: ["runway:52-54"]}
+  - {id: r10, query: "the best part of being a manager is looking after your team", category: paraphrase,
+     split: dev, relevant: ["runway:56"]}
+  - {id: r11, query: "a childhood classroom moment that inspired her", category: paraphrase, split: test,
+     relevant: ["artemis_launch:9-14"]}
+  - {id: r12, query: "a humble beginning as a small-town kid in southern Europe", category: paraphrase,
+     split: test, relevant: ["wayfinding:6-7"]}
+  - {id: r13, query: "the planet's spin is irregular so timekeeping needs occasional corrections",
+     category: paraphrase, split: dev, relevant: ["telling_time:71-75"]}
+  - {id: r14, query: "why even a billionth of a second matters for locating yourself", category: paraphrase,
+     split: test, relevant: ["telling_time:102-104", "telling_time:109-115"]}
+
+  # ---------------------------------------------------------------- question: natural-language questions
+  - {id: q01, query: "How many AI use cases did NASA identify?", category: question, split: dev,
+     relevant: ["ai_at_nasa:48-50"]}
+  - {id: q02, query: "How do atomic clocks agree on what time it is?", category: question, split: test,
+     relevant: ["telling_time:43-49", "telling_time:76-78"]}
+  - {id: q03, query: "Why do clocks on Mars run faster?", category: question, split: test,
+     relevant: ["telling_time:105-108"]}
+  - {id: q04, query: "When was Ellington established and why?", category: question, split: dev,
+     relevant: ["runway:66-69"]}
+  - {id: q05, query: "Which aircraft does NASA fly at Ellington?", category: question, split: test,
+     relevant: ["runway:28-29", "runway:42", "runway:74-78", "runway:84-87"]}
+  - {id: q06, query: "Which plane does he enjoy flying the most?", category: question, split: test,
+     relevant: ["runway:43-47"]}
+  - {id: q07, query: "What does the deputy chief of aircraft operations do day to day?", category: question,
+     split: dev, relevant: ["runway:31-38"]}
+  - {id: q08, query: "How long has she worked at Kennedy Space Center?", category: question, split: test,
+     relevant: ["artemis_launch:68", "artemis_launch:78"]}
+  - {id: q09, query: "What is transfusion medicine?", category: question, split: test,
+     relevant: ["stem_cells:67-72", "stem_cells:44-45@1"]}
+  - {id: q10, query: "Why can't doctors simply grow more stem cells in the lab?", category: question,
+     split: dev, relevant: ["stem_cells:53-55"]}
+  - {id: q11, query: "What factors explain differences in people's sense of direction?", category: question,
+     split: test, relevant: ["wayfinding:49-54"]}
+  - {id: q12, query: "Why study astronauts to learn how the brain navigates?", category: question,
+     split: test, relevant: ["wayfinding:63-66", "wayfinding:69"]}
+  - {id: q13, query: "How is AI different from machine learning and deep learning?", category: question,
+     split: dev, relevant: ["ai_at_nasa:33-36"]}
+  - {id: q14, query: "What does NASA's SCaN program manage?", category: question, split: test,
+     relevant: ["telling_time:19-23"]}
+  - {id: q15, query: "How did her physics teacher change her path?", category: question, split: test,
+     relevant: ["artemis_launch:19-24"]}
+
+  # ---------------------------------------------------------------- cross_file: topic in several recordings
+  - {id: c01, query: "childhood inspiration for a career in aviation or space", category: cross_file,
+     split: dev, relevant: ["stem_cells:16-22", "artemis_launch:9-14", "runway:9-10"]}
+  - {id: c02, query: "mentors who shaped their career", category: cross_file, split: test,
+     relevant: ["runway:57-63", "artemis_launch:19-24", "artemis_launch:30-40@1", "wayfinding:13",
+                "wayfinding:18-19"]}
+  - {id: c03, query: "why gravity matters for their research", category: cross_file, split: test,
+     relevant: ["stem_cells:56-58", "wayfinding:63-66", "wayfinding:69@1", "telling_time:44-46",
+                "telling_time:52-54", "telling_time:105-106@1"]}
+  - {id: c04, query: "military service before joining NASA", category: cross_file, split: dev,
+     relevant: ["telling_time:9-12", "runway:7-11"]}
+  - {id: c05, query: "going back to the Moon", category: cross_file, split: test,
+     relevant: ["artemis_launch:41-43", "telling_time:28-31", "ai_at_nasa:24@1"]}
+  - {id: c06, query: "safety reviews before a new mission or use", category: cross_file, split: test,
+     relevant: ["runway:35-38", "ai_at_nasa:53-56"]}
+  - {id: c07, query: "studying abroad for graduate school", category: cross_file, split: dev,
+     relevant: ["stem_cells:36", "wayfinding:19", "stem_cells:40@1"]}
+
+  # ---------------------------------------------------------------- misspelled: typos and ASR-mangled terms
+  - {id: m01, query: "apheresis", category: misspelled, split: dev,
+     notes: "ASR wrote 'ismoresis' (x2) and 'aphoresis' for two of the three mentions",
+     relevant: ["stem_cells:48-50", "stem_cells:75-77", "stem_cells:83-85"]}
+  - {id: m02, query: "Pizzamiglio", category: misspelled, split: test,
+     notes: "mentor's surname; ASR wrote 'Pizzamilio'", relevant: ["wayfinding:13", "wayfinding:18-19"]}
+  - {id: m03, query: "cord blood", category: misspelled, split: test, notes: "ASR wrote 'cod blood'",
+     relevant: ["stem_cells:51"]}
+  - {id: m04, query: "Gulfstrem jet", category: misspelled, split: dev,
+     relevant: ["runway:76", "runway:86", "runway:28@1", "runway:42@1"]}
+  - {id: m05, query: "vestibuler system", category: misspelled, split: test,
+     relevant: ["wayfinding:61-64", "wayfinding:67-69"]}
+  - {id: m06, query: "rubidum and sesium", category: misspelled, split: test, relevant: ["telling_time:81-85"]}
+  - {id: m07, query: "Zubaire", category: misspelled, split: dev,
+     notes: "ASR merged first+last name into 'Abizubair' twice", relevant: ["stem_cells:0", "stem_cells:8", "stem_cells:59"]}
+  - {id: m08, query: "Guppie airplane", category: misspelled, split: test,
+     relevant: ["runway:77", "runway:87", "runway:89-95", "runway:97-100", "runway:103-106"]}
+  - {id: m09, query: "El Passo", category: misspelled, split: test, relevant: ["runway:78", "runway:80-81", "runway:87"]}
+  - {id: m10, query: "transfussion medicine", category: misspelled, split: dev,
+     relevant: ["stem_cells:44-45", "stem_cells:67-72", "stem_cells:65-66@1"]}
+  - {id: m11, query: "microgravaty", category: misspelled, split: test, relevant: ["wayfinding:69"]}
+
+  # ---------------------------------------------------------------- speaker: role-scoped search
+  - {id: s01, query: "Guppy", role: host, category: speaker, split: dev,
+     relevant: ["runway:88-89", "runway:97-98", "runway:101"]}
+  - {id: s02, query: "Guppy", role: guest, category: speaker, split: test,
+     relevant: ["runway:77", "runway:87", "runway:90-95", "runway:99-100", "runway:102-106"]}
+  - {id: s03, query: "tell us about your background", role: host, category: speaker, split: test,
+     relevant: ["ai_at_nasa:1", "stem_cells:8-9", "wayfinding:3-4", "telling_time:4", "runway:5",
+                "artemis_launch:6-8"]}
+  - {id: s04, query: "thanks for having me", role: guest, category: speaker, split: dev,
+     notes: "runway:2 is the guest per NASA's transcript; our diarization assigns it to the host",
+     relevant: ["runway:2", "wayfinding:2", "telling_time:3", "artemis_launch:4", "ai_at_nasa:2-4",
+                "stem_cells:2@1"]}
+  - {id: s05, query: "atomic clocks", role: host, category: speaker, split: test, relevant: ["telling_time:56"]}
+  - {id: s06, query: "stem cells in space", role: guest, category: speaker, split: test,
+     relevant: ["stem_cells:57-58"]}
