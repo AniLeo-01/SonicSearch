@@ -27,6 +27,7 @@ ROLE_RE = re.compile(r"\brole:(host|guest)\b", re.IGNORECASE)
 
 
 def mmss(t: float) -> str:
+    t = round(t, 1)  # round first, or 59.96 s prints as 00:60.0
     return f"{int(t // 60):02d}:{t % 60:04.1f}"
 
 
