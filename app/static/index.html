@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SonicSearch</title>
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; line-height: 1.5; }
+  body { max-width: 50rem; margin: 0 auto; padding: 1rem 1rem 6rem; }
+  form { display: flex; flex-wrap: wrap; gap: .5rem; }
+  input[type=search] { flex: 1 1 18rem; }
+  input, select, button { font: inherit; padding: .4rem .6rem; }
+  ol { list-style: none; padding: 0; }
+  li { padding: .75rem 0; border-bottom: 1px solid #8884; }
+  li p { margin: .25rem 0 0; }
+  .meta, h2 { color: GrayText; }
+  h2 { font-size: 1rem; margin: 1.5rem 0 0; }
+  details { margin: 1rem 0; }
+  #upload { margin: .5rem 0; }
+  #files li { display: flex; justify-content: space-between; align-items: center; gap: .5rem; padding: .4rem 0; }
+  audio { position: fixed; inset: auto 0 0; width: 100%; }
+</style>
+
+<h1>SonicSearch</h1>
+<form>
+  <input type="search" name="q" aria-label="Search the recordings" placeholder="Search what was said…" required autofocus>
+  <select name="mode" aria-label="Search mode">
+    <option value="hybrid">Hybrid</option>
+    <option value="lexical">Keywords</option>
+    <option value="semantic">Meaning</option>
+  </select>
+  <select name="role" aria-label="Speaker">
+    <option value="">Anyone</option>
+    <option value="host">Host</option>
+    <option value="guest">Guest</option>
+  </select>
+  <button>Search</button>
+</form>
+<details id="library">
+  <summary>Recordings</summary>
+  <form id="upload">
+    <input type="file" name="file" accept="audio/*,video/*" aria-label="Audio file to upload" required>
+    <input name="title" aria-label="Title (optional)" placeholder="Title (optional)">
+    <button>Upload</button>
+    <span id="upload-status" role="status"></span>
+  </form>
+  <ul id="files"></ul>
+</details>
+<p id="status" role="status">
+  Try <a href="?q=cesium">cesium</a>, <a href="?q=%22firing+room+one%22">"firing room one"</a> or
+  <a href="?q=Why+do+clocks+on+Mars+run+faster%3F">Why do clocks on Mars run faster?</a>
+</p>
+<ol id="results"></ol>
+<h2 id="related-heading" hidden>Related moments</h2>
+<ol id="related" aria-labelledby="related-heading"></ol>
+<audio id="player" controls preload="none"></audio>
+
+<script>
+const form = document.querySelector("form");
+const status = document.getElementById("status");
+const results = document.getElementById("results");
+const related = document.getElementById("related");
+const relatedHeading = document.getElementById("related-heading");
+const player = document.getElementById("player");
+
+// The URL is the state: fill the form from it, drop empty params (role="" fails the API's pattern), search.
+const params = new URLSearchParams(location.search);
+for (const [k, v] of params) if (form.elements[k]) form.elements[k].value = v;
+for (const [k, v] of [...params]) if (!v) params.delete(k);
+if (params.get("q")) search(params);
+
+async function search(params) {
+  status.textContent = "Searching…";
+  try {
+    const r = await fetch("/api/search?" + params);
+    if (!r.ok) throw new Error(`search failed (${r.status})`);
+    const { hits } = await r.json();
+    const sure = hits.filter((h) => !h.related);
+    status.textContent = hits.length ? `${sure.length} match${sure.length === 1 ? "" : "es"}, ${hits.length - sure.length} related` : "No matches.";
+    results.replaceChildren(...sure.map(render));
+    related.replaceChildren(...hits.filter((h) => h.related).map(render));
+    relatedHeading.hidden = !related.children.length;
+  } catch (e) {
+    status.textContent = `Error: ${e.message}`;
+  }
+}
+
+function render(h) {
+  const li = document.createElement("li");
+  const play = document.createElement("button");
+  play.textContent = `▶ ${h.timestamp}`;
+  play.setAttribute("aria-label", `Play ${h.title} from ${h.timestamp}`);
+  play.onclick = () => {
+    player.src = `/audio/${encodeURIComponent(h.file_id)}.mp3#t=${h.start}`;
+    player.play();
+  };
+  const meta = document.createElement("span");
+  meta.className = "meta";
+  meta.textContent = ` ${h.title} · ${h.name ?? h.speaker} (${h.role})`;
+  li.append(play, meta, marked(h.text, h.highlights));
+  return li;
+}
+
+// Text nodes + <mark> for the [start, end) character spans; no innerHTML.
+function marked(text, spans) {
+  const p = document.createElement("p");
+  let at = 0;
+  for (const [a, b] of spans) {
+    const m = document.createElement("mark");
+    m.textContent = text.slice(a, b);
+    p.append(text.slice(at, a), m);
+    at = b;
+  }
+  p.append(text.slice(at));
+  return p;
+}
+
+// Recordings: upload, remove, and poll while a change is transcribing or re-indexing
+const upload = document.getElementById("upload");
+const uploadStatus = document.getElementById("upload-status");
+const fileList = document.getElementById("files");
+const clock = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+const busy = (f) => !["ready", "not indexed"].includes(f.status) && !f.status.startsWith("failed");
+let poll;
+
+async function refreshFiles() {
+  clearTimeout(poll);
+  try {
+    const { files } = await (await fetch("/api/files")).json();
+    document.querySelector("#library summary").textContent = `Recordings (${files.length})`;
+    fileList.replaceChildren(...files.map(fileRow));
+    if (files.some(busy)) poll = setTimeout(refreshFiles, 3000);
+  } catch (e) {
+    uploadStatus.textContent = `Error: ${e.message}`;
+  }
+}
+
+function fileRow(f) {
+  const li = document.createElement("li");
+  const label = document.createElement("span");
+  label.textContent = f.title + (f.duration ? ` · ${clock(f.duration)}` : "") + (f.status === "ready" ? "" : ` · ${f.status}`);
+  const remove = document.createElement("button");
+  remove.textContent = "Remove";
+  remove.disabled = busy(f);
+  remove.setAttribute("aria-label", `Remove ${f.title}`);
+  remove.onclick = async () => {
+    const failed = f.status.startsWith("failed");
+    if (!failed && !confirm(`Remove "${f.title}" from search? Its audio and transcript move to data/removed/.`)) return;
+    const r = await fetch(`/api/files/${encodeURIComponent(f.file_id)}`, { method: "DELETE" });
+    uploadStatus.textContent = r.ok ? "" : `Remove failed (${r.status})`;
+    refreshFiles();
+  };
+  li.append(label, remove);
+  return li;
+}
+
+upload.onsubmit = async (e) => {
+  e.preventDefault();
+  const file = upload.elements.file.files[0];
+  const params = new URLSearchParams({ name: file.name });
+  if (upload.elements.title.value.trim()) params.set("title", upload.elements.title.value.trim());
+  uploadStatus.textContent = "Uploading…";
+  try {
+    const r = await fetch("/api/files?" + params, { method: "PUT", body: file });
+    if (!r.ok) throw new Error(String((await r.json()).detail ?? r.status));
+    uploadStatus.textContent = "Uploaded: transcribing and re-indexing in the background.";
+    upload.reset();
+  } catch (err) {
+    uploadStatus.textContent = `Upload failed: ${err.message}`;
+  }
+  refreshFiles();
+};
+refreshFiles();
+</script>

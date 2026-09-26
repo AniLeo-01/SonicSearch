@@ -1,0 +1,36 @@
+[project]
+name = "sonicsearch"
+version = "0.1.0"
+description = "Hybrid search over spoken audio: find the moment, the time and the speaker"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "pgvector>=0.5.0",
+    "psycopg[binary,pool]>=3.3.6",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+    "pyyaml>=6.0.3",
+    "scikit-learn>=1.9.1",
+    "sentence-transformers>=6.1.0",
+    "speechbrain>=1.1.1",
+    "torch>=2.14.0",
+    "torchaudio>=2.11.0",  # comes with speechbrain; listed so Linux takes it from the CPU index too
+    "uvicorn>=0.54.0",
+]
+
+[dependency-groups]
+dev = ["pytest>=9.1.1"]
+
+# Linux (the Docker image) gets CPU-only torch and torchaudio: PyPI's Linux wheels pull ~15 CUDA packages the app never
+# uses, and torchaudio must match torch's build or it fails to load (libcudart missing).
+# macOS keeps PyPI's torch.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchaudio = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
