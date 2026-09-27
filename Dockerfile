@@ -16,8 +16,10 @@ COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-install-project --no-dev
 COPY app ./app
 COPY scripts ./scripts
+# starts as root, gives `app` the uid of the mounted data folder's owner if uid 1000 can't write to it, then runs as `app`
+COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/
 
 ENV PATH=/opt/venv/bin:$PATH HOME=/home/app HF_HOME=/home/app/.cache/huggingface DATA_DIR=/app/data PYTHONUNBUFFERED=1
-USER app
 EXPOSE 8000
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

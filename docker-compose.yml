@@ -1,7 +1,7 @@
 # SonicSearch: the API and PostgreSQL with pgvector.
 #   docker compose up --build            -> http://localhost:8000 (the first start downloads the models and indexes data/)
 #   docker compose run --rm app python -m app.ingest     (transcribe new recordings; needs GROQ_API_KEY in .env)
-#   docker compose exec app python -m app.index          (after editing transcripts on the host)
+#   docker compose exec -u app app python -m app.index   (after editing transcripts on the host)
 services:
   db:
     image: pgvector/pgvector:pg17  # the official postgres image + pgvector; pg_trgm and fuzzystrmatch ship with it

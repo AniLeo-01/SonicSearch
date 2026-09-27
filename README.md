@@ -111,7 +111,7 @@ docker run -d --name sonicsearch-postgres -p 127.0.0.1:5432:5432 \
 | `uv run python -m app.evaluate [--split dev\|test\|all]` | Score search on the golden queries. |
 | `uv run python -m pytest` | Tests. Set `TEST_DB_URL` to a throwaway PostgreSQL with pgvector to include the database tests, which rebuild its tables. |
 
-With Docker, run the `app` commands inside the app container: `docker compose exec app python -m app.index` with Compose, or `docker exec sonicsearch-app python -m app.index` with the pre-built image.
+With Docker, run these commands inside the app's container, as its user `app`: `docker compose exec -u app app python -m app.index` with Compose, or `docker exec -u app sonicsearch-app python -m app.index` with the pre-built image. Anything they write to `data/` then gets the same owner as the rest of the folder.
 
 ## How it works
 
