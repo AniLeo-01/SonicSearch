@@ -8,39 +8,79 @@ It combines keyword search (BM25, with sounds-like matching for typos and mishea
 
 On the golden query set (81 queries over six NASA podcast interviews), the first result alone finds 85–90% of what it could, and the top 10 find 96–97% of all labelled moments. See [Evaluation](#evaluation).
 
-## Quick start with Docker
+## Getting started
 
-Needs Docker with at least 4 GB of memory.
+The repository includes six sample recordings (NASA podcast interviews) with their transcripts, so you can search as soon as the app is up. A [Groq API key](https://console.groq.com/keys) (`GROQ_API_KEY` in `.env`) is only needed to upload or transcribe new recordings.
+
+### With Docker Compose
+
+Needs Docker with at least 4 GB of memory. Compose builds the image from source and starts it with a PostgreSQL database.
 
 ```sh
-cp .env.example .env   # set GROQ_API_KEY to upload or transcribe new recordings; search works without it
+git clone https://github.com/AniLeo-01/SonicSearch.git
+cd SonicSearch
+cp .env.example .env    # optional: set GROQ_API_KEY to add recordings
 docker compose up --build
 ```
 
 Open <http://localhost:8000>.
 
-- **First start:** downloads about 1.7 GB of models into a volume and indexes `data/` (about 30 s). Later starts skip both unless recordings changed outside the app. After editing transcripts on the host, run `docker compose exec app python -m app.index`.
+- **First start:** downloads about 1.7 GB of models into a Docker volume and indexes the recordings in `data/` (about 30 s). Later starts reuse both.
 - **Another port:** set `PORT` in `.env`.
-- **Stop:** `docker compose down`. Add `-v` to also delete the model cache and the database, which is rebuilt from `data/` on the next start.
+- **Stop:** `docker compose down`. Add `-v` to also delete the model cache and the database; the database is rebuilt from `data/` on the next start.
 
-The app is only reachable from this machine: there's no login, so don't expose it publicly as is.
+### With the pre-built Docker image
 
-**CI/CD** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)):
-- **Every pull request and push:** runs the tests (including the database tests, against a pgvector service container), then builds the image and smoke-tests it (CPU-only torch, `torchaudio` loads, the app imports).
-- **Pushes to `main`:** also publish the image to `ghcr.io/anileo-01/sonicsearch`, tagged `latest` and with the commit SHA.
+Needs Docker with at least 4 GB of memory. The image is published as `ghcr.io/anileo-01/sonicsearch:latest`, so there is nothing to build. It still needs a clone of this repository for the recordings in `data/`, and a PostgreSQL database with pgvector, which runs in a second container:
 
-## Run locally
+```sh
+git clone https://github.com/AniLeo-01/SonicSearch.git
+cd SonicSearch
+cp .env.example .env    # read by --env-file below; set GROQ_API_KEY to add recordings
+
+# PostgreSQL with pgvector, on a private network
+docker network create sonicsearch
+docker run -d --name sonicsearch-db --network sonicsearch \
+  -e POSTGRES_USER=sonicsearch -e POSTGRES_PASSWORD=sonicsearch -e POSTGRES_DB=sonicsearch \
+  -v sonicsearch-pgdata:/var/lib/postgresql/data \
+  pgvector/pgvector:pg17
+
+# the app (--restart on-failure retries until the database is ready)
+docker run -d --name sonicsearch-app --network sonicsearch --restart on-failure \
+  -p 127.0.0.1:8000:8000 --env-file .env \
+  -e DB_URL=postgresql://sonicsearch:sonicsearch@sonicsearch-db:5432/sonicsearch \
+  -v "$PWD/data:/app/data" -v sonicsearch-models:/home/app/.cache \
+  ghcr.io/anileo-01/sonicsearch:latest
+
+docker logs -f sonicsearch-app    # Ctrl+C once it prints "Application startup complete"
+```
+
+Open <http://localhost:8000>. As with Compose, the first start downloads the models and indexes `data/`.
+
+- **Stop:** `docker stop sonicsearch-app sonicsearch-db`. Start again with `docker start sonicsearch-db sonicsearch-app`.
+- **Remove:** `docker rm -f sonicsearch-app sonicsearch-db && docker network rm sonicsearch`. To also delete the database and the model cache: `docker volume rm sonicsearch-pgdata sonicsearch-models`.
+- **ARM machines:** the image is built for linux/amd64. On ARM, such as Apple Silicon Macs, use Docker Compose, which builds the image for your machine.
+
+### Without Docker
 
 Needs Python 3.13, [uv](https://docs.astral.sh/uv/), ffmpeg, and PostgreSQL with `pgvector` (`pg_trgm` and `fuzzystrmatch` ship with Postgres).
 
 ```sh
-cp .env.example .env                 # set DB_URL (and GROQ_API_KEY for new recordings)
+git clone https://github.com/AniLeo-01/SonicSearch.git
+cd SonicSearch
+cp .env.example .env                 # point DB_URL at your database (and set GROQ_API_KEY to add recordings)
 uv sync
 uv run python -m app.index           # build the search index from data/transcripts
 uv run uvicorn app.main:app          # http://127.0.0.1:8000
 ```
 
-Transcripts for the six dataset recordings are in `data/transcripts/`. If they're missing, run `uv run python -m app.ingest` first; it transcribes with Groq, labels the speakers and caches everything, so it only calls Groq once per file.
+No PostgreSQL with pgvector? Start one in Docker. It matches the default `DB_URL` in `.env.example`, so `.env` needs no changes:
+
+```sh
+docker run -d --name sonicsearch-postgres -p 127.0.0.1:5432:5432 \
+  -e POSTGRES_USER=sonicsearch -e POSTGRES_PASSWORD=password -e POSTGRES_DB=sonicsearch \
+  pgvector/pgvector:pg17
+```
 
 ## Using it
 
@@ -49,7 +89,7 @@ Transcripts for the six dataset recordings are in `data/transcripts/`. If they'r
 - **Mode:** Hybrid (default), Keywords only, or Meaning only.
 - **Speaker:** anyone, host or guest. You can also type `role:host` or `role:guest` in the query.
 - **Results:** confident matches come first, then **Related moments**. ▶ plays from the start of that sentence.
-- **Recordings (collapsible):** upload an audio or video file, or remove a recording. Each change transcribes as needed and then re-indexes; the list shows progress. Removed recordings are moved to `data/removed/<id>/`, not deleted.
+- **Recordings (collapsible):** upload an audio or video file (needs `GROQ_API_KEY`), or remove a recording. Each change transcribes as needed and then re-indexes; the list shows progress. Removed recordings are moved to `data/removed/<id>/`, not deleted.
 
 **HTTP API** (OpenAPI docs at `/docs`)
 
@@ -68,10 +108,10 @@ Transcripts for the six dataset recordings are in `data/transcripts/`. If they'r
 |---|---|
 | `uv run python -m app.ingest [--only ID …] [--force]` | Transcribe (Groq, cached) and label speakers for every recording in `data/manifest.yaml`. |
 | `uv run python -m app.index` | Rebuild the whole search index. Run it after anything that changes transcripts, chunking or models. |
-| `uv run python -m app.evaluate [--split dev\|test]` | Score search on the golden queries. |
-| `uv run --with beautifulsoup4 --with lxml python scripts/build_dataset.py` | Rebuild the dataset audio from NASA's public sources. |
-| `uv run python scripts/label_helper.py` | Turn `data/eval/queries.src.yaml` into `queries.yaml` (existing labels are kept). |
+| `uv run python -m app.evaluate [--split dev\|test\|all]` | Score search on the golden queries. |
 | `uv run python -m pytest` | Tests. Set `TEST_DB_URL` to a throwaway PostgreSQL with pgvector to include the database tests, which rebuild its tables. |
+
+With Docker, run the `app` commands inside the app container: `docker compose exec app python -m app.index` with Compose, or `docker exec sonicsearch-app python -m app.index` with the pre-built image.
 
 ## How it works
 
@@ -117,17 +157,14 @@ docs/              DATASET.md, EVALUATION.md; PRD.md and TDD.md (the original de
 
 ## Configuration
 
-All settings are environment variables, read from `.env`. [.env.example](.env.example) lists every one with its default, and [ARCHITECTURE.md](ARCHITECTURE.md#configuration) explains them. Only `GROQ_API_KEY` has to be set, and only to add recordings.
+All settings are environment variables, read from `.env`. [.env.example](.env.example) lists every one with its default, and [ARCHITECTURE.md](ARCHITECTURE.md#configuration) explains them. Only `GROQ_API_KEY` has to be set, and only to add recordings. With Docker Compose, `DB_URL` and `DATA_DIR` are set for you, and `POSTGRES_PASSWORD` and `PORT` set the database password and the host port.
 
 ## Limitations
 
 - **Two speakers assumed:** diarization expects exactly two speakers per recording, so solo recordings and panels are mislabelled.
 - **Latency:** searches take about 1.2 s on CPU, mostly the reranker.
-- **Re-indexing:** every upload or removal rebuilds the whole index (about 30 s now), which grows with the library.
+- **Re-indexing:** every upload or removal rebuilds the whole index (about 30 s with the six sample recordings), so it takes longer as the library grows.
 - **Long uploads:** recordings over about an hour may exceed Groq's upload size limit.
-- **No login:** keep it on localhost.
-
-The upgrade path for each is in [ARCHITECTURE.md](ARCHITECTURE.md#operations).
 
 ## Documentation
 
