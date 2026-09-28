@@ -385,18 +385,21 @@ Each decision gives what was chosen, why, and what it costs. Numbers are from th
 
 - **Decision:**
   - **Services:** `docker-compose.yml` runs two: the app, built from `Dockerfile`, and `pgvector/pgvector:pg17`. The app waits for the database's health check. At startup it indexes, with the models it has just loaded, whenever the database doesn't list the manifest's recordings (a fresh volume, or recordings changed outside the app).
-  - **Image:** `python:3.13-slim` with uv and ffmpeg, running as a non-root user. On Linux, uv takes `torch` from PyTorch's CPU-only index (`[tool.uv.sources]` in `pyproject.toml`).
+  - **Image:** `python:3.13-slim` with uv and ffmpeg. On Linux, uv takes `torch` from PyTorch's CPU-only index (`[tool.uv.sources]` in `pyproject.toml`).
+  - **User:** the app runs as `app` (uid 1000). The entrypoint, `docker-entrypoint.sh`, starts as root: if uid 1000 can't write to the mounted `data/`, it first gives `app` the folder owner's uid and gid, then drops to `app`.
   - **Storage:** models go to a named volume on first start, `data/` is bind-mounted from the host, and the database has its own volume.
   - **Network:** the database isn't published, and the app is published on `127.0.0.1` only.
 - **Why:**
   - **Image size:** PyPI's Linux `torch` wheels pull about 15 CUDA packages the app never uses. The CPU index keeps the image at 2.5 GB; macOS keeps PyPI's wheels.
   - **Startup:** checking at startup keeps a fresh database in step with `data/` without re-indexing, or loading the models twice, on every restart.
   - **Data:** a bind mount keeps recordings, transcripts and uploads outside the container.
+  - **File ownership:** the app writes uploads, transcripts and the manifest into that mount. On Linux, uid 1000 can't write to a folder another user owns, so taking the owner's uid makes uploads work whoever owns the checkout, and the new files stay editable on the host. Where uid 1000 can already write (a host user with uid 1000, Docker Desktop), nothing changes.
   - **Exposure:** with no authentication, a localhost-only port is the safe default.
 - **Cost:**
   - **First start:** downloads about 1.7 GB of models.
-  - **First start (or new recordings on the host):** spends about 30 s indexing. Transcript edits made on the host aren't detected; run `docker compose exec app python -m app.index`.
+  - **First start (or new recordings on the host):** spends about 30 s indexing. Transcript edits made on the host aren't detected; run `docker compose exec -u app app python -m app.index`.
   - **Memory:** the app needs about 3 GB, so give Docker at least 4 GB.
+  - **Root at start:** the entrypoint runs as root before it drops to `app`, and `app` is root itself when root owns `data/` (a checkout made as root, or rootless Docker, where root is the host user). `docker exec` runs as root unless given `-u app`.
 
 ## Configuration
 
@@ -422,7 +425,7 @@ Settings come from `.env` through `app/config.py` (pydantic-settings); see `.env
 flowchart LR
   BR["Browser"] -->|"127.0.0.1:PORT"| UV
   subgraph Host["Docker host"]
-    subgraph APP["app container (non-root)"]
+    subgraph APP["app container (user app, with the uid of ./data's owner)"]
       UV["uvicorn app.main:app :8000<br/>on start: index if the database<br/>doesn't match the manifest"]
     end
     DB["db container<br/>pgvector/pgvector:pg17<br/>no published port"]
@@ -439,11 +442,12 @@ flowchart LR
 
 | Piece | Details |
 |---|---|
-| `Dockerfile` | `python:3.13-slim-bookworm`, uv 0.5.21, ffmpeg. Dependencies install from `uv.lock` (`--locked --no-dev`) in their own layer, before the code. CPU-only torch. Runs as user `app` (uid 1000). About 2.5 GB. |
+| `Dockerfile` | `python:3.13-slim-bookworm`, uv 0.5.21, ffmpeg. Dependencies install from `uv.lock` (`--locked --no-dev`) in their own layer, before the code. CPU-only torch. Runs the app as user `app` through `docker-entrypoint.sh`. About 2.5 GB. |
+| `docker-entrypoint.sh` | Starts as root. If `app` (uid 1000) can't write to `DATA_DIR`, gives `app` the folder owner's uid and gid (`usermod` also re-owns `/home/app`). Re-owns any model-cache files another user left, then runs the command as `app` with `setpriv`. A container started with `--user` skips all of this. |
 | `docker-compose.yml` | `db` (health-checked with `pg_isready`) and `app` (starts once `db` is healthy). `.env` is passed in if present; `DB_URL` and `DATA_DIR` are always set by compose. |
 | `.dockerignore` | Keeps `.git`, `.venv`, `data/` and `.env` out of the build context, so no key or data is baked into the image. |
 | Volumes | `./data` (bind), `model-cache` (Hugging Face and speaker models), `pgdata` (the database). `docker compose down -v` deletes the last two. |
-| CI/CD (`.github/workflows/ci.yml`) | On every pull request and push: `uv sync --locked` and the tests (unit tests, plus search against a pgvector service container), then an image build with a smoke test (`torch` has no CUDA, `torchaudio` loads, `app.main` imports). On pushes to `main`, the same image is published to `ghcr.io/anileo-01/sonicsearch` as `latest` and `sha-<commit>`. |
+| CI/CD (`.github/workflows/ci.yml`) | On every pull request and push: `uv sync --locked` and the tests (unit tests, plus search against a pgvector service container), then an image build with smoke tests (`torch` has no CUDA, `torchaudio` loads, `app.main` imports, and the app can write to a `data/` folder owned by uid 1000, another user or root). On pushes to `main`, the same image is published to `ghcr.io/anileo-01/sonicsearch` as `latest` and `sha-<commit>`. |
 
 ## Operations
 
@@ -454,6 +458,7 @@ flowchart LR
   - **Rebuild the dataset audio:** `scripts/build_dataset.py`.
 - **Security:**
   - **No authentication:** anyone who can reach the server can search, upload and remove, so keep it on localhost.
+  - **Container user:** the app runs as `app`, with the uid of the owner of `data/` when uid 1000 can't write there (AD-18). It runs as root only if root owns `data/`.
   - **Uploads:** capped at 200 MB and streamed to a temp file. The recording id is sanitized to `[a-z0-9_]`, so a file name can't escape `data/`.
   - **ffmpeg:** runs without a shell, on an argument list.
   - **SQL:** query text only ever travels as bound parameters.
